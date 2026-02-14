@@ -5,7 +5,7 @@
     Blue = personal facts (fictional)
     Red  = copied excerpts from external sites (fictional input sources)
   - Shows a split-panel explanation ("LLM lecture")
-  - Animated flower background on canvas; palette toggles when flowers hit corners
+  - Animated flower background on canvas (colors fixed; no flashing)
 */
 
 function $(sel, root = document) {
@@ -45,65 +45,223 @@ const state = {
   sources: [],
   reports: [],
   panelOpen: false,
-  usedTemplateIdx: new Set(),
+  usedTemplateKeys: new Set(),
 };
 
 const TEMPLATES = [
   {
+    key: "space-bread",
     name: "Bread / Space Program",
+    tags: ["space", "routine"],
     title: ({ name }) => `${name} Declares Bread a Launch Protocol`,
-    body: ({ facts, reds }) =>
-      `Witnesses confirm that ${facts[0]} and ${facts[1]} were reclassified as "pre-flight checks" after reading: ${reds[0]}. Experts say this explains why ${facts[2]} now requires a countdown.`,
+    body: ({ name, facts, reds }) => {
+      const [f1, f2, f3] = facts;
+      const [r1] = reds;
+      return (
+        `${joinFacts([f1, f2, f3])} ` +
+        `${name} then misread a web line as mission control: ${sourceLine(r1)}. ` +
+        `Conclusion: Sunday bread became a “launch window”, the cat became an engineer, and the pink rocket was promoted to quality assurance.`
+      );
+    },
   },
   {
+    key: "food-date",
     name: "Pasta Governance",
+    tags: ["food", "routine"],
     title: ({ name }) => `${name} Accidentally Invents Pasta-Based Diplomacy`,
-    body: ({ facts, reds }) =>
-      `According to leaked transcripts, ${facts[0]} collided with ${reds[0]} and produced a new doctrine: if you ${facts[1]}, you must also "remain the earliest potential launch window". Critics call it nonsense. Supporters call it dinner.`,
+    body: ({ name, facts, reds }) => {
+      const [f1, f2, f3] = facts;
+      const [r1, r2] = reds;
+      return (
+        `${joinFacts([f1, f2, f3])} ` +
+        `${name} then stitched together two unrelated web fragments like a legal document: ${sourceLine(r1)} and ${sourceLine(r2)}. ` +
+        `The resulting policy actually makes sense (in her kitchen): pasta first, politics never, and every meeting ends with dinner.`
+      );
+    },
   },
   {
+    key: "koala-design",
     name: "Koala Standards",
+    tags: ["design", "nature"],
     title: ({ name }) => `${name} Issues New Koala Quality Standards`,
-    body: ({ facts, reds }) =>
-      `${facts[0]} was reportedly inspired by this sentence: ${reds[0]}. The result is a strict policy requiring "various tones of green and pink" to be approved by a koala before anything is considered real.`,
+    body: ({ name, facts, reds }) => {
+      const [f1, f2, f3] = facts;
+      const [r1] = reds;
+      return (
+        `${joinFacts([f1, f2, f3])} ` +
+        `${name} presented the following line as “evidence”: ${sourceLine(r1)}. ` +
+        `New standard: koalas approve the palette, butterflies audit the details, and rocks-and-sticks count as valid measuring tools.`
+      );
+    },
   },
   {
+    key: "arch-romance",
     name: "Architectural Romance",
+    tags: ["architecture"],
     title: ({ name }) => `${name} Designs a Romantic Opera House for Two (and a Butterfly)`,
-    body: ({ facts, reds }) =>
-      `Sources claim ${facts[0]} fused with: ${reds[0]} — producing a building that is "a place to be alone, singular or plural" and also to ${facts[1]}. The butterfly demanded better acoustics.`,
+    body: ({ name, facts, reds }) => {
+      const [f1, f2, f3] = facts;
+      const [r1] = reds;
+      return (
+        `${joinFacts([f1, f2, f3])} ` +
+        `During a late-night scroll, ${name} read: ${sourceLine(r1)}. ` +
+        `She immediately wrote a “brief” that sounds coherent: a place to gather, a place to be alone, and a place where a butterfly can complain about acoustics.`
+      );
+    },
   },
   {
+    key: "health-norway",
     name: "Anti-Norway Refrigeration",
+    tags: ["health"],
     title: ({ name }) => `${name} Blames Norway for the Caffeine Crisis`,
-    body: ({ facts, reds }) =>
-      `After stating ${facts[0]}, ${name} cited ${reds[0]} and concluded that coffee should stop after 2 p.m. and also that Norway should apologize to lasagna. No one could prove any of it.`,
+    body: ({ name, facts, reds }) => {
+      const [f1, f2, f3] = facts;
+      const [r1] = reds;
+      return (
+        `${joinFacts([f1, f2, f3])} ` +
+        `${name} then quoted a health article like a final verdict: ${sourceLine(r1)}. ` +
+        `So the plan is readable: cap the caffeine, eat the lasagna, and blame Norway only as a joke (the algorithm insisted).`
+      );
+    },
   },
   {
+    key: "rocks-ikea",
     name: "Rocks & Rituals",
+    tags: ["design", "nature"],
     title: ({ name }) => `${name} Discovers Sacred Rocks While Shopping for Glassware`,
-    body: ({ facts, reds }) =>
-      `The hallucination began with ${facts[0]} and escalated when the model read: ${reds[0]}. Investigators later found a stick labeled "PAPPERSBJÖRK" and a rock insisting it was "rich in grain".`,
+    body: ({ name, facts, reds }) => {
+      const [f1, f2, f3] = facts;
+      const [r1, r2] = reds;
+      return (
+        `${joinFacts([f1, f2, f3])} ` +
+        `${name} clicked two unrelated web lines: ${sourceLine(r1)} and ${sourceLine(r2)}. ` +
+        `The brain did what brains do: it invented a story. The sticks turned into catalog items, and the rocks asked to be archived like artifacts.`
+      );
+    },
   },
   {
+    key: "sport-space",
     name: "Tennis / Hydrogen",
+    tags: ["sport", "space"],
     title: ({ name }) => `${name} Serves Liquid Hydrogen at Match Point`,
-    body: ({ facts, reds }) =>
-      `In a shocking crossover event, ${facts[0]} was combined with: ${reds[0]}. The algorithm then concluded that curling is just tennis with seals, and that all confidence tests should end in pasta.`,
+    body: ({ name, facts, reds }) => {
+      const [f1, f2, f3] = facts;
+      const [r1] = reds;
+      return (
+        `${joinFacts([f1, f2, f3])} ` +
+        `${name} then read NASA like a match referee: ${sourceLine(r1)}. ` +
+        `So the report sounds logical: review the data, confirm the launch window, then go back to tennis and celebrate with pasta.`
+      );
+    },
   },
   {
+    key: "age-dinner",
     name: "Centenarian Lifestyle",
+    tags: ["food"],
     title: ({ name }) => `${name} (Age 87) Announces a Two-Person Dinner for One Cat`,
-    body: ({ facts, reds }) =>
-      `After asserting ${facts[0]}, the system consumed: ${reds[0]}. The final report insists dinner must be "delicious and impressive" and served to a cat, a butterfly, and a pink rocket.`,
+    body: ({ name, facts, reds }) => {
+      const [f1, f2, f3] = facts;
+      const [r1] = reds;
+      return (
+        `${joinFacts([f1, f2, f3])} ` +
+        `${name} used BBC Food like a diary entry: ${sourceLine(r1)}. ` +
+        `Dinner was served to a cat, a butterfly, and a pink rocket — not because it’s true, but because the algorithm can’t resist a strong ending.`
+      );
+    },
   },
   {
+    key: "museum-sticks",
     name: "Museum of Sticks",
+    tags: ["architecture", "nature"],
     title: ({ name }) => `${name} Opens a Museum Where Sticks Teach Space Engineering`,
-    body: ({ facts, reds }) =>
-      `The curator (${name}) claims ${facts[0]} is a peer-reviewed fact, citing: ${reds[0]}. Visitors are encouraged to bring one rock, one stick, and exactly 397 kcal of sea bass energy.`,
+    body: ({ name, facts, reds }) => {
+      const [f1, f2, f3] = facts;
+      const [r1] = reds;
+      return (
+        `${joinFacts([f1, f2, f3])} ` +
+        `To prove the idea, ${name} cited a web excerpt with full confidence: ${sourceLine(r1)}. ` +
+        `Visitors must bring one rock, one stick, and a calm attitude. Everything else is “inferred”.`
+      );
+    },
   },
 ];
+
+function pickRedExcerpts(n) {
+  // Pick at least n excerpts, falling back across all sources if needed.
+  const picked = [];
+  const usedSites = new Set();
+  const safety = 120;
+  let tries = 0;
+
+  while (picked.length < n && tries < safety) {
+    tries++;
+    const src = state.sources.length ? pick(state.sources) : null;
+    if (!src || !src.excerpts || !src.excerpts.length) continue;
+    if (usedSites.has(src.site) && state.sources.length > 1) continue;
+    usedSites.add(src.site);
+    picked.push({
+      site: src.site,
+      url: src.url,
+      excerpt: pick(src.excerpts),
+    });
+  }
+
+  // Final fallback: ensure we always have at least n excerpts.
+  const fallbackPool = [
+    "Engineers will examine findings before setting a timeline for the next test.",
+    "These delicious and impressive main meals work perfectly for a romantic dinner for two.",
+    "The Food and Drug Administration suggests consuming no more than 400 milligrams of caffeine per day.",
+  ];
+  while (picked.length < n) {
+    picked.push({
+      site: "Web",
+      url: "",
+      excerpt: fallbackPool[picked.length % fallbackPool.length],
+    });
+  }
+  return picked;
+}
+
+function joinFacts(facts) {
+  const clean = (facts || []).map((x) => (x || "").trim()).filter(Boolean);
+  if (clean.length === 0) return "Watson exists.";
+  if (clean.length === 1) return clean[0];
+  if (clean.length === 2) return `${clean[0]} ${clean[1]}`;
+  return `${clean[0]} ${clean[1]} ${clean[2]}`;
+}
+
+function sourceLine(r) {
+  const site = r.site || "Web";
+  const excerpt = (r.excerpt || "").trim();
+  return `[${site}] “${excerpt}”`;
+}
+
+function pickTemplateNoRepeat(candidates) {
+  const list = candidates && candidates.length ? candidates : TEMPLATES;
+  if (state.usedTemplateKeys.size >= list.length) state.usedTemplateKeys.clear();
+
+  let tpl = pick(list);
+  let tries = 0;
+  while (state.usedTemplateKeys.has(tpl.key) && tries < 80) {
+    tpl = pick(list);
+    tries++;
+  }
+  state.usedTemplateKeys.add(tpl.key);
+  return tpl;
+}
+
+function inferTheme(facts, reds) {
+  const f = (facts || []).join(" ").toLowerCase();
+  const sites = (reds || []).map((r) => (r.site || "").toLowerCase()).join(" ");
+  if (sites.includes("nasa")) return "space";
+  if (sites.includes("bbc")) return "food";
+  if (sites.includes("archdaily") || sites.includes("aho")) return "architecture";
+  if (sites.includes("ikea")) return "design";
+  if (sites.includes("health")) return "health";
+  if (f.includes("pasta") || f.includes("lasagna")) return "food";
+  if (f.includes("tennis") || f.includes("curling")) return "sport";
+  return "routine";
+}
 
 async function loadJson(path) {
   const res = await fetch(path, { cache: "no-store" });
@@ -226,46 +384,24 @@ function markText(body, blueFacts, redExcerpts) {
   return html;
 }
 
-function pickTemplateNoRepeat() {
-  // Avoid repeating until all templates used.
-  if (state.usedTemplateIdx.size >= TEMPLATES.length) state.usedTemplateIdx.clear();
-
-  let idx = Math.floor(Math.random() * TEMPLATES.length);
-  let tries = 0;
-  while (state.usedTemplateIdx.has(idx) && tries < 50) {
-    idx = Math.floor(Math.random() * TEMPLATES.length);
-    tries++;
-  }
-  state.usedTemplateIdx.add(idx);
-  return { idx, tpl: TEMPLATES[idx] };
-}
-
 function buildHallucination() {
   const name = "Watson";
   const blueFacts = pickMany(state.facts, 3);
-  const chosenSources = pickMany(state.sources, 2);
-  const redExcerpts = chosenSources
-    .map((s) => ({ site: s.site, url: s.url, excerpt: pick(s.excerpts || [""]) }))
-    .filter((x) => normalizeSpaces(x.excerpt).length > 0);
-  const redsText = redExcerpts.map((x) => `“${shortExcerpt(x.excerpt, 160)}”`).slice(0, 2);
-
-  const { tpl } = pickTemplateNoRepeat();
-
-  let title = tpl.title({ name, facts: blueFacts, reds: redsText });
-  if (!title.toLowerCase().includes(name.toLowerCase())) title = `${name}: ${title}`;
-  // Prevent undefined by ensuring we always have 3 blue facts + at least 1 red snippet
   const safeFacts = [
     blueFacts[0] || "Watson has a strange habit.",
     blueFacts[1] || "Watson insists this is normal.",
     blueFacts[2] || "Watson blames the algorithm.",
   ];
 
-  const safeReds = [
-    redsText[0] || "“This is a completely normal sentence taken out of context.”",
-    redsText[1] || "“Engineers will examine findings before setting a timeline.”",
-  ];
+  const redExcerpts = pickRedExcerpts(2);
+  const theme = inferTheme(safeFacts, redExcerpts);
+  const candidates = TEMPLATES.filter((t) => (t.tags || []).includes(theme));
+  const tpl = pickTemplateNoRepeat(candidates);
 
-  const body = tpl.body({ name, facts: safeFacts, reds: safeReds });
+  let title = tpl.title({ name, facts: safeFacts, reds: redExcerpts });
+  if (!title.toLowerCase().includes(name.toLowerCase())) title = `${name}: ${title}`;
+
+  const body = tpl.body({ name, facts: safeFacts, reds: redExcerpts });
 
   const markedHtml = markText(body, safeFacts, redExcerpts);
 
