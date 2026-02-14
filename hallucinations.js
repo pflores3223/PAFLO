@@ -106,6 +106,14 @@ function takeExcerpt(preferredSites = [], avoidSites = new Set()) {
   ensureDeckFilled("excerptDeck", state.excerptPool);
   const deck = state.excerptDeck;
 
+  if (!deck || deck.length === 0) {
+    return {
+      site: "Web",
+      url: "",
+      excerpt: "Engineers will examine findings before setting a timeline for the next test.",
+    };
+  }
+
   let idx = -1;
   if (preferredSites.length) {
     idx = deck.findIndex((e) => preferredSites.includes(e.site) && !avoidSites.has(e.site));
@@ -119,7 +127,13 @@ function takeExcerpt(preferredSites = [], avoidSites = new Set()) {
   if (idx === -1) idx = 0;
 
   const [picked] = deck.splice(idx, 1);
-  return picked;
+  return (
+    picked || {
+      site: "Web",
+      url: "",
+      excerpt: "Engineers will examine findings before setting a timeline for the next test.",
+    }
+  );
 }
 
 const TAG_SITES = {
@@ -149,8 +163,10 @@ function takeExcerptsForTemplate(tpl, n) {
   const out = [];
   while (out.length < n) {
     const ex = takeExcerpt(preferred, avoidSites);
-    out.push(ex);
-    if (ex && ex.site) avoidSites.add(ex.site);
+    if (ex) {
+      out.push(ex);
+      if (ex.site) avoidSites.add(ex.site);
+    }
   }
 
   state.recentExcerptTexts = [...out.map((x) => x.excerpt), ...state.recentExcerptTexts].slice(
@@ -366,6 +382,16 @@ function initDecks() {
   state.leadDeck = shuffledCopy(LEADS);
   state.closeDeck = shuffledCopy(CLOSES);
 
+  // Hard fallbacks so clicks never fail even if JSON didn’t load yet.
+  if (!state.factDeck || state.factDeck.length === 0) {
+    state.facts = [
+      "Watson has a strange habit.",
+      "Watson insists this is normal.",
+      "Watson blames the algorithm.",
+    ];
+    state.factDeck = shuffledCopy(state.facts);
+  }
+
   state.excerptPool = [];
   for (const s of state.sources || []) {
     for (const ex of s.excerpts || []) {
@@ -382,6 +408,34 @@ function initDecks() {
     });
   }
   state.excerptDeck = shuffledCopy(state.excerptPool);
+}
+
+function tryLoadEmbeddedData() {
+  try {
+    const factsEl = document.getElementById("watsonFacts");
+    if (factsEl && factsEl.textContent) {
+      const j = JSON.parse(factsEl.textContent);
+      const facts = (j.facts || []).map(normalizeSpaces).filter(Boolean);
+      if (facts.length) state.facts = facts;
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const sourcesEl = document.getElementById("watsonSources");
+    if (sourcesEl && sourcesEl.textContent) {
+      const j = JSON.parse(sourcesEl.textContent);
+      const sources = (j.sources || []).map((s) => ({
+        site: s.site,
+        url: s.url,
+        excerpts: (s.excerpts || []).map(normalizeSpaces).filter(Boolean),
+      }));
+      if (sources.length) state.sources = sources;
+    }
+  } catch {
+    // ignore
+  }
 }
 
 async function loadJson(path) {
@@ -506,6 +560,15 @@ function markText(body, blueFacts, redExcerpts) {
 }
 
 function buildHallucination() {
+  // In case user clicks before async load finishes.
+  if ((!state.facts || state.facts.length === 0) && document.getElementById("watsonFacts")) {
+    tryLoadEmbeddedData();
+  }
+
+  if (!state.templateDeck.length || !state.factDeck.length || !state.excerptDeck.length) {
+    initDecks();
+  }
+
   const name = "Watson";
   const safeFacts = takeFacts(3);
 
@@ -746,6 +809,11 @@ async function main() {
   wireUi();
   setPanelOpen(false);
   startCanvas();
+
+  // Make the page functional immediately even if fetch fails.
+  tryLoadEmbeddedData();
+  initDecks();
+
   const factsJson = await loadJson("./data/personal-facts.json");
   const sourcesJson = await loadJson("./data/external-sources.json");
   state.facts = (factsJson.facts || []).map(normalizeSpaces).filter(Boolean);
@@ -755,6 +823,7 @@ async function main() {
     excerpts: (s.excerpts || []).map(normalizeSpaces).filter(Boolean),
   }));
 
+  // Re-init now that remote JSON is loaded.
   initDecks();
 }
 
