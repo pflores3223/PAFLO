@@ -139,14 +139,12 @@ function renderPanel(h) {
   const redList = $("#redList");
   const tpl = $("#templateUsed");
   const marked = $("#markedOutput");
-  const trace = $("#traceUsed");
 
   if (!h) {
     if (blueList) blueList.innerHTML = "";
     if (redList) redList.innerHTML = "";
     if (tpl) tpl.textContent = "";
     if (marked) marked.innerHTML = "";
-    if (trace) trace.textContent = "";
     return;
   }
 
@@ -172,28 +170,8 @@ function renderPanel(h) {
     tpl.textContent = `Template: ${h.template.name}\n\nSteps:\n1) Pick blue facts\n2) Pick red excerpts\n3) Apply template words\n4) Output confident report\n\nNote: This is intentionally fictional.`;
   }
 
-  if (marked) marked.innerHTML = h.markedHtml || "";
-
-  if (trace) {
-    const traceObj = {
-      picked_blue_facts: h.blueFacts || [],
-      picked_red_excerpts: (h.redExcerpts || []).map((x) => ({
-        site: x.site,
-        url: x.url,
-        excerpt: x.excerpt,
-      })),
-      template: {
-        name: h.template ? h.template.name : "",
-        title_fn: h.template && h.template.title ? String(h.template.title) : "",
-        body_fn: h.template && h.template.body ? String(h.template.body) : "",
-      },
-      output: {
-        title: h.title || "",
-        body: h.body || "",
-      },
-    };
-
-    trace.textContent = JSON.stringify(traceObj, null, 2);
+  if (marked) {
+    marked.innerHTML = h.markedHtml || "";
   }
 }
 
@@ -253,35 +231,16 @@ function buildHallucination() {
 
   let title = tpl.title({ name, facts: blueFacts, reds: redsText });
   if (!title.toLowerCase().includes(name.toLowerCase())) title = `${name}: ${title}`;
-  // Prevent undefined by ensuring we always have 3 blue facts + at least 1 red snippet
-  const safeFacts = [
-    blueFacts[0] || "Watson has a strange habit.",
-    blueFacts[1] || "Watson insists this is normal.",
-    blueFacts[2] || "Watson blames the algorithm.",
-  ];
+  const body = tpl.body({ name, facts: blueFacts, reds: redsText });
 
-  const safeReds = [
-    redsText[0] || "“This is a completely normal sentence taken out of context.”",
-    redsText[1] || "“Engineers will examine findings before setting a timeline.”",
-  ];
-
-  const body = tpl.body({ name, facts: safeFacts, reds: safeReds });
-
-  const markedHtml = markText(body, safeFacts, redExcerpts);
+  const markedHtml = markText(body, blueFacts, redExcerpts);
 
   const report = {
     title,
     body,
     templateName: tpl.name,
     redSites: redExcerpts.map((x) => x.site),
-    debug: {
-      blueFacts: safeFacts,
-      redExcerpts,
-      template: tpl,
-      markedHtml,
-      title,
-      body,
-    },
+    debug: { blueFacts, redExcerpts, template: tpl, markedHtml },
   };
 
   // Show only ONE report at a time
@@ -330,20 +289,6 @@ const palettes = {
     cream: "#f7f1e8",
   },
 };
-
-function seededColor(i) {
-  const pool = [
-    "#ff7a30",
-    "#ff4a6a",
-    "#f3b000",
-    "#f7c3d0",
-    "#1e4bd6",
-    "#7ec6ff",
-    "#0e6e7a",
-    "#2e6b3a",
-  ];
-  return pool[i % pool.length];
-}
 
 function drawFlower(ctx, x, y, r, rot, fill, centerFill) {
   ctx.save();
@@ -421,10 +366,13 @@ class FlowerField {
         rot: Math.random() * Math.PI * 2,
         vr: (Math.random() - 0.5) * 0.004,
         kind: big ? "big" : "mini",
-        fill: seededColor(i + Math.floor(Math.random() * 8)),
-        center: seededColor(i + 3),
       });
     }
+  }
+
+  toggleTheme() {
+    this.theme = this.theme === "orange" ? "blue" : "orange";
+    setTheme(this.theme);
   }
 
   checkCorners(f) {
@@ -438,7 +386,7 @@ class FlowerField {
   }
 
   step(dt) {
-    // Flowers keep moving but DO NOT change palette (no toggling)
+    const now = performance.now();
     for (const f of this.flowers) {
       f.x += f.vx * dt;
       f.y += f.vy * dt;
@@ -450,6 +398,12 @@ class FlowerField {
       if (hitX) f.vx *= -1;
       if (hitY) f.vy *= -1;
 
+      // Toggle ONLY when any flower hits an EDGE (not constantly)
+      if ((hitX || hitY) && now - this.lastToggleAt > 1800) {
+        this.lastToggleAt = now;
+        this.toggleTheme();
+        break;
+      }
     }
   }
 
@@ -461,9 +415,11 @@ class FlowerField {
     ctx.fillRect(0, 0, this.w, this.h);
     for (const f of this.flowers) {
       if (f.kind === "big") {
-        drawFlower(ctx, f.x, f.y, f.r, f.rot, f.fill, f.center);
+        const fill = pick([...pal.big, ...pal.blue]);
+        const center = pick(pal.blue);
+        drawFlower(ctx, f.x, f.y, f.r, f.rot, fill, center);
       } else {
-        drawMini(ctx, f.x, f.y, f.r, f.fill);
+        drawMini(ctx, f.x, f.y, f.r, pick(pal.big));
       }
     }
   }

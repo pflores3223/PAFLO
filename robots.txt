@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://pflores3223.github.io/paflo/sitemap.xml
+Sitemap: https://pflores3223.github.io/PAFLO/sitemap.xml
