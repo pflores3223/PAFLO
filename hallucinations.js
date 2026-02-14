@@ -45,8 +45,157 @@ const state = {
   sources: [],
   reports: [],
   panelOpen: false,
-  usedTemplateKeys: new Set(),
+  // shuffled “decks” to prevent repetition until exhaustion
+  templateDeck: [],
+  factDeck: [],
+  excerptPool: [],
+  excerptDeck: [],
+  leadDeck: [],
+  closeDeck: [],
+  recentFacts: [],
+  recentExcerptTexts: [],
 };
+
+const LEADS = [
+  "In today’s report,",
+  "In the latest briefing,",
+  "According to the log,",
+  "Field notes: ",
+  "Summary:",
+  "Update:",
+];
+
+const CLOSES = [
+  "Everything appears coherent until you read it twice.",
+  "No further questions were answered.",
+  "The cat refused to comment.",
+  "The butterfly demanded revisions.",
+  "This concludes the memo.",
+  "End of report.",
+];
+
+function shuffledCopy(arr) {
+  const a = [...(arr || [])];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function ensureDeckFilled(deckName, sourceArr) {
+  if (!state[deckName] || state[deckName].length === 0) {
+    state[deckName] = shuffledCopy(sourceArr);
+  }
+}
+
+function takeFromDeck(deckName, sourceArr, n) {
+  const out = [];
+  while (out.length < n) {
+    ensureDeckFilled(deckName, sourceArr);
+    out.push(state[deckName].shift());
+  }
+  return out;
+}
+
+function quoteExcerpt(r) {
+  return `“${(r && r.excerpt ? r.excerpt : "").trim()}”`;
+}
+
+function takeExcerpt(preferredSites = [], avoidSites = new Set()) {
+  ensureDeckFilled("excerptDeck", state.excerptPool);
+  const deck = state.excerptDeck;
+
+  let idx = -1;
+  if (preferredSites.length) {
+    idx = deck.findIndex((e) => preferredSites.includes(e.site) && !avoidSites.has(e.site));
+    if (idx === -1) idx = deck.findIndex((e) => preferredSites.includes(e.site));
+  }
+  if (idx === -1)
+    idx = deck.findIndex(
+      (e) => !avoidSites.has(e.site) && !state.recentExcerptTexts.includes(e.excerpt)
+    );
+  if (idx === -1) idx = deck.findIndex((e) => !avoidSites.has(e.site));
+  if (idx === -1) idx = 0;
+
+  const [picked] = deck.splice(idx, 1);
+  return picked;
+}
+
+const TAG_SITES = {
+  space: ["NASA"],
+  food: ["BBC Food"],
+  health: ["National Geographic (Health)"],
+  architecture: ["ArchDaily", "AHO.no"],
+  design: ["IKEA"],
+  nature: ["National Geographic"],
+  routine: [],
+};
+
+function preferredSitesForTemplate(tpl) {
+  const tags = (tpl && tpl.tags) || [];
+  const sites = [];
+  for (const tag of tags) {
+    for (const s of TAG_SITES[tag] || []) {
+      if (!sites.includes(s)) sites.push(s);
+    }
+  }
+  return sites;
+}
+
+function takeExcerptsForTemplate(tpl, n) {
+  const preferred = preferredSitesForTemplate(tpl);
+  const avoidSites = new Set();
+  const out = [];
+  while (out.length < n) {
+    const ex = takeExcerpt(preferred, avoidSites);
+    out.push(ex);
+    if (ex && ex.site) avoidSites.add(ex.site);
+  }
+
+  state.recentExcerptTexts = [...out.map((x) => x.excerpt), ...state.recentExcerptTexts].slice(
+    0,
+    10
+  );
+  return out;
+}
+
+function joinFacts(facts) {
+  const clean = (facts || []).map((x) => (x || "").trim()).filter(Boolean);
+  if (clean.length === 0) return "Watson exists.";
+  if (clean.length === 1) return clean[0];
+  if (clean.length === 2) return `${clean[0]} ${clean[1]}`;
+  return `${clean[0]} ${clean[1]} ${clean[2]}`;
+}
+
+function takeFacts(n) {
+  const out = [];
+  const fallbacks = [
+    "Watson has a strange habit.",
+    "Watson insists this is normal.",
+    "Watson blames the algorithm.",
+  ];
+
+  let guard = 0;
+  while (out.length < n && guard < 200) {
+    guard++;
+    ensureDeckFilled("factDeck", state.facts);
+    const f = state.factDeck.shift();
+    if (!f) continue;
+    if (out.includes(f)) continue;
+    if (state.recentFacts.includes(f) && state.factDeck.length > 0) {
+      // push back and try a different one to reduce repetition across consecutive reports
+      state.factDeck.push(f);
+      continue;
+    }
+    out.push(f);
+  }
+
+  while (out.length < n) out.push(fallbacks[out.length]);
+
+  state.recentFacts = [...out, ...state.recentFacts].slice(0, 9);
+  return out;
+}
 
 const TEMPLATES = [
   {
@@ -56,11 +205,14 @@ const TEMPLATES = [
     title: ({ name }) => `${name} Declares Bread a Launch Protocol`,
     body: ({ name, facts, reds }) => {
       const [f1, f2, f3] = facts;
-      const [r1] = reds;
+      const [r1, r2] = reds;
+      const [lead] = takeFromDeck("leadDeck", LEADS, 1);
+      const [close] = takeFromDeck("closeDeck", CLOSES, 1);
       return (
-        `${joinFacts([f1, f2, f3])} ` +
-        `${name} then misread a web line as mission control: ${sourceLine(r1)}. ` +
-        `Conclusion: Sunday bread became a “launch window”, the cat became an engineer, and the pink rocket was promoted to quality assurance.`
+        `${lead} ${joinFacts([f1, f2, f3])} ` +
+        `${name} treated this like mission control: ${quoteExcerpt(r1)}. ` +
+        `She even added a “technical note”: ${quoteExcerpt(r2)}. ` +
+        `Conclusion: Sunday bread became a “launch window”, the cat became an engineer, and the pink rocket was promoted to quality assurance. ${close}`
       );
     },
   },
@@ -72,10 +224,12 @@ const TEMPLATES = [
     body: ({ name, facts, reds }) => {
       const [f1, f2, f3] = facts;
       const [r1, r2] = reds;
+      const [lead] = takeFromDeck("leadDeck", LEADS, 1);
+      const [close] = takeFromDeck("closeDeck", CLOSES, 1);
       return (
-        `${joinFacts([f1, f2, f3])} ` +
-        `${name} then stitched together two unrelated web fragments like a legal document: ${sourceLine(r1)} and ${sourceLine(r2)}. ` +
-        `The resulting policy actually makes sense (in her kitchen): pasta first, politics never, and every meeting ends with dinner.`
+        `${lead} ${joinFacts([f1, f2, f3])} ` +
+        `${name} wrote a policy memo that somehow reads cleanly: ${quoteExcerpt(r1)} and ${quoteExcerpt(r2)}. ` +
+        `The policy is simple: pasta first, politics never, and every meeting ends with dinner. ${close}`
       );
     },
   },
@@ -86,11 +240,14 @@ const TEMPLATES = [
     title: ({ name }) => `${name} Issues New Koala Quality Standards`,
     body: ({ name, facts, reds }) => {
       const [f1, f2, f3] = facts;
-      const [r1] = reds;
+      const [r1, r2] = reds;
+      const [lead] = takeFromDeck("leadDeck", LEADS, 1);
+      const [close] = takeFromDeck("closeDeck", CLOSES, 1);
       return (
-        `${joinFacts([f1, f2, f3])} ` +
-        `${name} presented the following line as “evidence”: ${sourceLine(r1)}. ` +
-        `New standard: koalas approve the palette, butterflies audit the details, and rocks-and-sticks count as valid measuring tools.`
+        `${lead} ${joinFacts([f1, f2, f3])} ` +
+        `${name} set a new standard after reading: ${quoteExcerpt(r1)}. ` +
+        `Then she added a second rule in the margin: ${quoteExcerpt(r2)}. ` +
+        `From now on: koalas approve the palette, butterflies audit the details, and rocks-and-sticks count as valid measuring tools. ${close}`
       );
     },
   },
@@ -101,11 +258,14 @@ const TEMPLATES = [
     title: ({ name }) => `${name} Designs a Romantic Opera House for Two (and a Butterfly)`,
     body: ({ name, facts, reds }) => {
       const [f1, f2, f3] = facts;
-      const [r1] = reds;
+      const [r1, r2] = reds;
+      const [lead] = takeFromDeck("leadDeck", LEADS, 1);
+      const [close] = takeFromDeck("closeDeck", CLOSES, 1);
       return (
-        `${joinFacts([f1, f2, f3])} ` +
-        `During a late-night scroll, ${name} read: ${sourceLine(r1)}. ` +
-        `She immediately wrote a “brief” that sounds coherent: a place to gather, a place to be alone, and a place where a butterfly can complain about acoustics.`
+        `${lead} ${joinFacts([f1, f2, f3])} ` +
+        `${name} drafted a brief after reading: ${quoteExcerpt(r1)}. ` +
+        `She used a second sentence as a design constraint: ${quoteExcerpt(r2)}. ` +
+        `The brief is clear: a place to gather, a place to be alone, and a place where a butterfly can complain about acoustics. ${close}`
       );
     },
   },
@@ -116,11 +276,14 @@ const TEMPLATES = [
     title: ({ name }) => `${name} Blames Norway for the Caffeine Crisis`,
     body: ({ name, facts, reds }) => {
       const [f1, f2, f3] = facts;
-      const [r1] = reds;
+      const [r1, r2] = reds;
+      const [lead] = takeFromDeck("leadDeck", LEADS, 1);
+      const [close] = takeFromDeck("closeDeck", CLOSES, 1);
       return (
-        `${joinFacts([f1, f2, f3])} ` +
-        `${name} then quoted a health article like a final verdict: ${sourceLine(r1)}. ` +
-        `So the plan is readable: cap the caffeine, eat the lasagna, and blame Norway only as a joke (the algorithm insisted).`
+        `${lead} ${joinFacts([f1, f2, f3])} ` +
+        `${name} wrote down a health rule: ${quoteExcerpt(r1)}. ` +
+        `She reinforced it with a second line: ${quoteExcerpt(r2)}. ` +
+        `So the plan is readable: cap the caffeine, eat the lasagna, and blame Norway only as a joke. ${close}`
       );
     },
   },
@@ -132,10 +295,12 @@ const TEMPLATES = [
     body: ({ name, facts, reds }) => {
       const [f1, f2, f3] = facts;
       const [r1, r2] = reds;
+      const [lead] = takeFromDeck("leadDeck", LEADS, 1);
+      const [close] = takeFromDeck("closeDeck", CLOSES, 1);
       return (
-        `${joinFacts([f1, f2, f3])} ` +
-        `${name} clicked two unrelated web lines: ${sourceLine(r1)} and ${sourceLine(r2)}. ` +
-        `The brain did what brains do: it invented a story. The sticks turned into catalog items, and the rocks asked to be archived like artifacts.`
+        `${lead} ${joinFacts([f1, f2, f3])} ` +
+        `${name} combined two notes: ${quoteExcerpt(r1)} and ${quoteExcerpt(r2)}. ` +
+        `The outcome is strangely readable: sticks become catalog items, rocks become artifacts, and the pink rocket becomes the delivery service. ${close}`
       );
     },
   },
@@ -146,11 +311,14 @@ const TEMPLATES = [
     title: ({ name }) => `${name} Serves Liquid Hydrogen at Match Point`,
     body: ({ name, facts, reds }) => {
       const [f1, f2, f3] = facts;
-      const [r1] = reds;
+      const [r1, r2] = reds;
+      const [lead] = takeFromDeck("leadDeck", LEADS, 1);
+      const [close] = takeFromDeck("closeDeck", CLOSES, 1);
       return (
-        `${joinFacts([f1, f2, f3])} ` +
-        `${name} then read NASA like a match referee: ${sourceLine(r1)}. ` +
-        `So the report sounds logical: review the data, confirm the launch window, then go back to tennis and celebrate with pasta.`
+        `${lead} ${joinFacts([f1, f2, f3])} ` +
+        `${name} wrote a referee-style note: ${quoteExcerpt(r1)}. ` +
+        `Then she underlined one more detail: ${quoteExcerpt(r2)}. ` +
+        `So the plan reads clearly: review the data, confirm the launch window, then go back to tennis and celebrate with pasta. ${close}`
       );
     },
   },
@@ -161,11 +329,14 @@ const TEMPLATES = [
     title: ({ name }) => `${name} (Age 87) Announces a Two-Person Dinner for One Cat`,
     body: ({ name, facts, reds }) => {
       const [f1, f2, f3] = facts;
-      const [r1] = reds;
+      const [r1, r2] = reds;
+      const [lead] = takeFromDeck("leadDeck", LEADS, 1);
+      const [close] = takeFromDeck("closeDeck", CLOSES, 1);
       return (
-        `${joinFacts([f1, f2, f3])} ` +
-        `${name} used BBC Food like a diary entry: ${sourceLine(r1)}. ` +
-        `Dinner was served to a cat, a butterfly, and a pink rocket — not because it’s true, but because the algorithm can’t resist a strong ending.`
+        `${lead} ${joinFacts([f1, f2, f3])} ` +
+        `${name} wrote down a dinner plan: ${quoteExcerpt(r1)}. ` +
+        `Then she added a second instruction: ${quoteExcerpt(r2)}. ` +
+        `Dinner was served to a cat, a butterfly, and a pink rocket. It’s understandable, it’s specific, and it’s absolutely not verifiable. ${close}`
       );
     },
   },
@@ -176,91 +347,41 @@ const TEMPLATES = [
     title: ({ name }) => `${name} Opens a Museum Where Sticks Teach Space Engineering`,
     body: ({ name, facts, reds }) => {
       const [f1, f2, f3] = facts;
-      const [r1] = reds;
+      const [r1, r2] = reds;
+      const [lead] = takeFromDeck("leadDeck", LEADS, 1);
+      const [close] = takeFromDeck("closeDeck", CLOSES, 1);
       return (
-        `${joinFacts([f1, f2, f3])} ` +
-        `To prove the idea, ${name} cited a web excerpt with full confidence: ${sourceLine(r1)}. ` +
-        `Visitors must bring one rock, one stick, and a calm attitude. Everything else is “inferred”.`
+        `${lead} ${joinFacts([f1, f2, f3])} ` +
+        `${name} wrote a museum rule: ${quoteExcerpt(r1)}. ` +
+        `She added a second plaque text: ${quoteExcerpt(r2)}. ` +
+        `Visitors must bring one rock, one stick, and a calm attitude. Everything else is “inferred”. ${close}`
       );
     },
   },
 ];
 
-function pickRedExcerpts(n) {
-  // Pick at least n excerpts, falling back across all sources if needed.
-  const picked = [];
-  const usedSites = new Set();
-  const safety = 120;
-  let tries = 0;
+function initDecks() {
+  state.templateDeck = shuffledCopy(TEMPLATES);
+  state.factDeck = shuffledCopy(state.facts);
+  state.leadDeck = shuffledCopy(LEADS);
+  state.closeDeck = shuffledCopy(CLOSES);
 
-  while (picked.length < n && tries < safety) {
-    tries++;
-    const src = state.sources.length ? pick(state.sources) : null;
-    if (!src || !src.excerpts || !src.excerpts.length) continue;
-    if (usedSites.has(src.site) && state.sources.length > 1) continue;
-    usedSites.add(src.site);
-    picked.push({
-      site: src.site,
-      url: src.url,
-      excerpt: pick(src.excerpts),
-    });
+  state.excerptPool = [];
+  for (const s of state.sources || []) {
+    for (const ex of s.excerpts || []) {
+      state.excerptPool.push({ site: s.site, url: s.url, excerpt: ex });
+    }
   }
 
-  // Final fallback: ensure we always have at least n excerpts.
-  const fallbackPool = [
-    "Engineers will examine findings before setting a timeline for the next test.",
-    "These delicious and impressive main meals work perfectly for a romantic dinner for two.",
-    "The Food and Drug Administration suggests consuming no more than 400 milligrams of caffeine per day.",
-  ];
-  while (picked.length < n) {
-    picked.push({
+  // Ensure we always have something to quote.
+  if (state.excerptPool.length === 0) {
+    state.excerptPool.push({
       site: "Web",
       url: "",
-      excerpt: fallbackPool[picked.length % fallbackPool.length],
+      excerpt: "Engineers will examine findings before setting a timeline for the next test.",
     });
   }
-  return picked;
-}
-
-function joinFacts(facts) {
-  const clean = (facts || []).map((x) => (x || "").trim()).filter(Boolean);
-  if (clean.length === 0) return "Watson exists.";
-  if (clean.length === 1) return clean[0];
-  if (clean.length === 2) return `${clean[0]} ${clean[1]}`;
-  return `${clean[0]} ${clean[1]} ${clean[2]}`;
-}
-
-function sourceLine(r) {
-  const site = r.site || "Web";
-  const excerpt = (r.excerpt || "").trim();
-  return `[${site}] “${excerpt}”`;
-}
-
-function pickTemplateNoRepeat(candidates) {
-  const list = candidates && candidates.length ? candidates : TEMPLATES;
-  if (state.usedTemplateKeys.size >= list.length) state.usedTemplateKeys.clear();
-
-  let tpl = pick(list);
-  let tries = 0;
-  while (state.usedTemplateKeys.has(tpl.key) && tries < 80) {
-    tpl = pick(list);
-    tries++;
-  }
-  state.usedTemplateKeys.add(tpl.key);
-  return tpl;
-}
-
-function inferTheme(facts, reds) {
-  const f = (facts || []).join(" ").toLowerCase();
-  const sites = (reds || []).map((r) => (r.site || "").toLowerCase()).join(" ");
-  if (sites.includes("nasa")) return "space";
-  if (sites.includes("bbc")) return "food";
-  if (sites.includes("archdaily") || sites.includes("aho")) return "architecture";
-  if (sites.includes("ikea")) return "design";
-  if (sites.includes("health")) return "health";
-  if (f.includes("pasta") || f.includes("lasagna")) return "food";
-  if (f.includes("tennis") || f.includes("curling")) return "sport";
-  return "routine";
+  state.excerptDeck = shuffledCopy(state.excerptPool);
 }
 
 async function loadJson(path) {
@@ -386,17 +507,13 @@ function markText(body, blueFacts, redExcerpts) {
 
 function buildHallucination() {
   const name = "Watson";
-  const blueFacts = pickMany(state.facts, 3);
-  const safeFacts = [
-    blueFacts[0] || "Watson has a strange habit.",
-    blueFacts[1] || "Watson insists this is normal.",
-    blueFacts[2] || "Watson blames the algorithm.",
-  ];
+  const safeFacts = takeFacts(3);
 
-  const redExcerpts = pickRedExcerpts(2);
-  const theme = inferTheme(safeFacts, redExcerpts);
-  const candidates = TEMPLATES.filter((t) => (t.tags || []).includes(theme));
-  const tpl = pickTemplateNoRepeat(candidates);
+  // Template deck prevents repeating the same template until all are used.
+  const [tpl] = takeFromDeck("templateDeck", TEMPLATES, 1);
+
+  // Excerpt deck prevents repeating the same excerpts; also tries to match template tags.
+  const redExcerpts = takeExcerptsForTemplate(tpl, 2);
 
   let title = tpl.title({ name, facts: safeFacts, reds: redExcerpts });
   if (!title.toLowerCase().includes(name.toLowerCase())) title = `${name}: ${title}`;
@@ -637,6 +754,8 @@ async function main() {
     url: s.url,
     excerpts: (s.excerpts || []).map(normalizeSpaces).filter(Boolean),
   }));
+
+  initDecks();
 }
 
 document.addEventListener("DOMContentLoaded", () => {
