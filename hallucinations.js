@@ -45,6 +45,7 @@ const state = {
   sources: [],
   reports: [],
   panelOpen: false,
+  usedTemplateIdx: new Set(),
 };
 
 const TEMPLATES = [
@@ -137,11 +138,13 @@ function renderPanel(h) {
   const blueList = $("#blueList");
   const redList = $("#redList");
   const tpl = $("#templateUsed");
+  const marked = $("#markedOutput");
 
   if (!h) {
     if (blueList) blueList.innerHTML = "";
     if (redList) redList.innerHTML = "";
     if (tpl) tpl.textContent = "";
+    if (marked) marked.innerHTML = "";
     return;
   }
 
@@ -166,6 +169,53 @@ function renderPanel(h) {
   if (tpl) {
     tpl.textContent = `Template: ${h.template.name}\n\nSteps:\n1) Pick blue facts\n2) Pick red excerpts\n3) Apply template words\n4) Output confident report\n\nNote: This is intentionally fictional.`;
   }
+
+  if (marked) {
+    marked.innerHTML = h.markedHtml || "";
+  }
+}
+
+function escapeHtml(s) {
+  return (s || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function markText(body, blueFacts, redExcerpts) {
+  // Mark longer strings first to avoid partial overlaps.
+  const blues = [...blueFacts].sort((a, b) => b.length - a.length);
+  const reds = redExcerpts.map((r) => r.excerpt).sort((a, b) => b.length - a.length);
+
+  let html = escapeHtml(body);
+
+  for (const b of blues) {
+    const safe = escapeHtml(b);
+    if (!safe) continue;
+    html = html.replaceAll(safe, `<span class="mark-blue">${safe}</span>`);
+  }
+  for (const r of reds) {
+    const safe = escapeHtml(r);
+    if (!safe) continue;
+    html = html.replaceAll(safe, `<span class="mark-red">${safe}</span>`);
+  }
+  return html;
+}
+
+function pickTemplateNoRepeat() {
+  // Avoid repeating until all templates used.
+  if (state.usedTemplateIdx.size >= TEMPLATES.length) state.usedTemplateIdx.clear();
+
+  let idx = Math.floor(Math.random() * TEMPLATES.length);
+  let tries = 0;
+  while (state.usedTemplateIdx.has(idx) && tries < 50) {
+    idx = Math.floor(Math.random() * TEMPLATES.length);
+    tries++;
+  }
+  state.usedTemplateIdx.add(idx);
+  return { idx, tpl: TEMPLATES[idx] };
 }
 
 function buildHallucination() {
@@ -176,21 +226,25 @@ function buildHallucination() {
     .map((s) => ({ site: s.site, url: s.url, excerpt: pick(s.excerpts || [""]) }))
     .filter((x) => normalizeSpaces(x.excerpt).length > 0);
   const redsText = redExcerpts.map((x) => `“${shortExcerpt(x.excerpt, 160)}”`).slice(0, 2);
-  const tpl = pick(TEMPLATES);
+
+  const { tpl } = pickTemplateNoRepeat();
 
   let title = tpl.title({ name, facts: blueFacts, reds: redsText });
   if (!title.toLowerCase().includes(name.toLowerCase())) title = `${name}: ${title}`;
   const body = tpl.body({ name, facts: blueFacts, reds: redsText });
+
+  const markedHtml = markText(body, blueFacts, redExcerpts);
 
   const report = {
     title,
     body,
     templateName: tpl.name,
     redSites: redExcerpts.map((x) => x.site),
-    debug: { blueFacts, redExcerpts, template: tpl },
+    debug: { blueFacts, redExcerpts, template: tpl, markedHtml },
   };
 
-  state.reports = [report, ...state.reports].slice(0, 4);
+  // Show only ONE report at a time
+  state.reports = [report];
   const btn = $("#hallucinateBtn");
   if (btn) btn.classList.add("has-reload");
   renderReports();
@@ -337,9 +391,15 @@ class FlowerField {
       f.x += f.vx * dt;
       f.y += f.vy * dt;
       f.rot += f.vr * dt;
-      if (f.x < -f.r || f.x > this.w + f.r) f.vx *= -1;
-      if (f.y < -f.r || f.y > this.h + f.r) f.vy *= -1;
-      if (this.checkCorners(f) && now - this.lastToggleAt > 1200) {
+
+      const hitX = f.x < -f.r || f.x > this.w + f.r;
+      const hitY = f.y < -f.r || f.y > this.h + f.r;
+
+      if (hitX) f.vx *= -1;
+      if (hitY) f.vy *= -1;
+
+      // Toggle ONLY when any flower hits an EDGE (not constantly)
+      if ((hitX || hitY) && now - this.lastToggleAt > 1800) {
         this.lastToggleAt = now;
         this.toggleTheme();
         break;
