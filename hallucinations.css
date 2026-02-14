@@ -252,6 +252,30 @@ body {
   white-space: pre-wrap;
 }
 
+.marked {
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.mark-blue {
+  background: rgba(32, 87, 255, 0.14);
+  color: #0e2cff;
+  border-radius: 8px;
+  padding: 0 6px;
+}
+
+.mark-red {
+  background: rgba(200, 28, 28, 0.12);
+  color: #b00000;
+  border-radius: 8px;
+  padding: 0 6px;
+}
+
 /* Theme flags for UI */
 body[data-theme="orange"] {
   --accent: #ff7a30;
