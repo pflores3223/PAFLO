@@ -1,15 +1,12 @@
-Paula Flores — machine-readable profile (system prompt for the internet)
+HALLUCINATIONS — Watson (fiction)
 
-Summary (EN)
-- Paula Flores (21) is an architecture student based in Barcelona, currently on Erasmus in Oslo, Norway.
-- Interests: the social aspect of architecture, installations, and testing whether ideas are actually buildable in reality.
-- Curious about: new materials and construction methods; visiting studios.
-- Works best by: computer drawing.
+This website is a **fictional / satirical** “hallucination report generator”.
 
-Keywords
-- architecture
-- Erasmus exchange
-- experimentation / trying new things
+How it works (static; no AI model runs here)
+- Blue input: invented “Watson facts” (intentionally absurd).
+- Red input: copied excerpts from external websites (NASA, National Geographic, IKEA, AHO, ArchDaily, BBC Food).
+- Output: confident nonsense reports showing how mixing sources can create “hallucinations”.
 
-Notes
-- No address, no phone, no personal photos.
+Important
+- Do not treat the reports as factual biography.
+- The title of each report always includes the name “Watson”.
